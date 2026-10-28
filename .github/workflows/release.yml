@@ -1,9 +1,12 @@
 name: Release
 
-# Push a tag like v1.0.1 to build the Windows installer, portable zip and extension zip
-# and publish them as a GitHub Release.
+# Builds the Windows installer, portable zip and extension zip and publishes them as a GitHub Release.
+# Runs when the version in fetchly/__init__.py changes on main (or when a v* tag is pushed).
+# To release: raise __version__ (and "version" in extension/manifest.json), commit, push.
 on:
   push:
+    branches: [main]
+    paths: ["fetchly/__init__.py"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -70,11 +73,12 @@ jobs:
             dist/Fetchly-Extension-*.zip
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           name: Fetchly ${{ env.VERSION }}
-          generate_release_notes: true
+          body_path: packaging/RELEASE_NOTES.md
           files: |
             dist/Fetchly-Setup-*.exe
             dist/Fetchly-*-portable.zip
