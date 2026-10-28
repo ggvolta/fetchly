@@ -1,0 +1,24 @@
+Fetchly includes the following third-party software:
+
+Qt for Python (PySide6) and Qt 6
+  Licensed under the GNU Lesser General Public License v3 (LGPLv3).
+  https://www.qt.io/qt-for-python  —  source: https://code.qt.io/
+
+Fluent UI System Icons
+  Copyright (c) 2020 Microsoft Corporation. Licensed under the MIT License.
+  https://github.com/microsoft/fluentui-system-icons
+
+Requests, urllib3, idna, charset-normalizer, certifi
+  Apache License 2.0 / MIT / BSD / MPL-2.0 respectively.
+
+cryptography
+  Apache License 2.0 / BSD License.
+
+Python
+  Python Software Foundation License.
+
+PyInstaller bootloader
+  GPL v2 with a special exception permitting use in any program.
+
+Bricolage Grotesque typeface (used in the logo wordmark and artwork)
+  Copyright 2022 The Bricolage Grotesque Project Authors. SIL Open Font License 1.1 (assets/fonts).

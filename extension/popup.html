@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px/1.4 "Segoe UI", system-ui, sans-serif; margin: 0; width: 320px; color: #1f2933; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: linear-gradient(180deg, #1D2058, #14163F); color: #fff; }
+  header img { width: 28px; height: 28px; }
+  header b { font-size: 15px; }
+  header span { color: #B9BCEB; }
+  .status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e4e9ee; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #e53935; }
+  .dot.on { background: #43a047; }
+  section { padding: 10px 14px; border-bottom: 1px solid #e4e9ee; }
+  label.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; color: #5c6b7a; letter-spacing: .03em; }
+  .media { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; }
+  .media span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { background: #3D42C9; color: #fff; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  button:hover { background: #3237AE; }
+  .muted { color: #7b8794; }
+  input[type=number] { width: 80px; }
+  .hint { font-size: 12px; color: #7b8794; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <header><img src="icons/icon48.png" alt=""><b>Fetchly</b><span>Download Manager</span></header>
+  <div class="status"><div class="dot" id="dot"></div><span id="statusText">Checking…</span></div>
+  <section>
+    <label class="row"><span>Take over browser downloads</span><input type="checkbox" id="enabled"></label>
+    <div class="hint">When off, downloads stay in the browser. Tip: hold <b>Alt</b> while clicking a link to let the browser download just that one.</div>
+  </section>
+  <section>
+    <h4>Media on this page</h4>
+    <div id="media"><span class="muted">Play the video, then it appears here.</span></div>
+  </section>
+  <section>
+    <label class="row"><span>Fetchly port</span><input type="number" id="port" min="1024" max="65535"></label>
+    <div class="hint">Must match Options › File Types in Fetchly (default 7614).</div>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

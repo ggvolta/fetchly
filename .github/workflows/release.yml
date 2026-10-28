@@ -1,0 +1,81 @@
+name: Release
+
+# Push a tag like v1.0.1 to build the Windows installer, portable zip and extension zip
+# and publish them as a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          pip install -r requirements.txt pyinstaller pillow
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) { choco install nsis -y --no-progress }
+
+      - name: Run tests
+        run: python -m tests.test_engine
+
+      - name: Build Fetchly.exe
+        run: |
+          python tools/make_assets.py
+          python -m PyInstaller --noconfirm --clean --windowed --name Fetchly `
+            --icon assets\fetchly.ico --version-file packaging\version_info.txt `
+            --add-data "fetchly\ui\assets;fetchly\ui\assets" `
+            --exclude-module tkinter --exclude-module unittest --exclude-module pydoc `
+            --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick `
+            main.py
+          Copy-Item -Recurse extension dist\Fetchly\extension
+          Copy-Item packaging\THIRD-PARTY-NOTICES.txt, LICENSE dist\Fetchly\
+
+      - name: Build installer and zips
+        run: |
+          $v = python -c "import fetchly; print(fetchly.__version__)"
+          $nsis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
+          if (-not $nsis) { $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          Push-Location packaging
+          & $nsis /V2 "/DSRCDIR=..\dist\Fetchly" "/DOUTFILE=..\dist\Fetchly-Setup-$v.exe" "/DVERSION=$v" installer.nsi
+          Pop-Location
+          Compress-Archive -Path dist\Fetchly -DestinationPath "dist\Fetchly-$v-portable.zip"
+          Compress-Archive -Path extension\* -DestinationPath "dist\Fetchly-Extension-$v.zip"
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Smoke test the built app
+        run: |
+          $p = Start-Process -FilePath dist\Fetchly\Fetchly.exe -ArgumentList "--tray" -PassThru
+          Start-Sleep -Seconds 15
+          $r = Invoke-RestMethod http://127.0.0.1:7614/ping
+          if ($r.app -ne "Fetchly") { throw "app did not respond" }
+          Stop-Process -Id $p.Id
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fetchly-${{ env.VERSION }}
+          path: |
+            dist/Fetchly-Setup-*.exe
+            dist/Fetchly-*-portable.zip
+            dist/Fetchly-Extension-*.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Fetchly ${{ env.VERSION }}
+          generate_release_notes: true
+          files: |
+            dist/Fetchly-Setup-*.exe
+            dist/Fetchly-*-portable.zip
+            dist/Fetchly-Extension-*.zip
