@@ -157,7 +157,7 @@ class DownloadInfoDialog(Dialog):
         name = sanitize_filename(payload.get("filename") or "") if self._user_named else filename_from_url(url)
         if self.kind == "hls":
             title = sanitize_filename(payload.get("title") or "") or os.path.splitext(name)[0] or "video"
-            name = os.path.splitext(name)[0] + ".ts" if self._user_named else title + ".ts"
+            name = os.path.splitext(name)[0] + self._stream_ext() if self._user_named else title + self._stream_ext()
         name = name or "download"
         self._path_edited = self._cat_edited = False
         self._probe_result = self._probe_error = None
@@ -219,6 +219,10 @@ class DownloadInfoDialog(Dialog):
             self._timer.timeout.connect(self._poll_probe)
             self._timer.start(150)
 
+    def _stream_ext(self):
+        fmt = getattr(self.s, "stream_format", "mkv")
+        return "." + (fmt if fmt in ("mkv", "mp4", "ts") else "mkv")
+
     def _refresh_header(self):
         name = os.path.basename(self.path.text()) or "download"
         self.title.setText(_elide(self.title, name, 520))
@@ -260,7 +264,7 @@ class DownloadInfoDialog(Dialog):
         if not self._user_named and not self._path_edited:
             name = r["filename"]
             if self.kind == "hls":
-                name = (sanitize_filename(self.p.get("title") or "") or os.path.splitext(name)[0]) + ".ts"
+                name = (sanitize_filename(self.p.get("title") or "") or os.path.splitext(name)[0]) + self._stream_ext()
             folder = os.path.dirname(self.path.text())
             if not self._cat_edited:
                 cat = category_for(name)
@@ -741,6 +745,10 @@ class CompleteDialog(Dialog):
         sub = QLabel(human_size(item.size))
         sub.setObjectName("subtitle")
         col.addWidget(sub)
+        if getattr(item, "note", ""):
+            note = QLabel(f"<span style='color:{theme.colors().get('warning', '#c27c0e')}'>{item.note}</span>")
+            note.setWordWrap(True)
+            col.addWidget(note)
         top.addLayout(col, 1)
         self.body.addLayout(top)
         f = _form()
@@ -929,6 +937,37 @@ class OptionsDialog(Dialog):
         v.addStretch(1)
         tabs.addTab(c, "Connection")
 
+        # Videos (streaming)
+        vd, v = page()
+        f = _form()
+        self.stream_fmt = QComboBox()
+        for label, val in (("MKV (recommended: plays smoothly in VLC and most players)", "mkv"),
+                           ("MP4 (best for phones, TVs and Windows Media Player)", "mp4"),
+                           ("TS (keep the raw stream, no conversion)", "ts")):
+            self.stream_fmt.addItem(label, val)
+        self.stream_fmt.setCurrentIndex(max(0, self.stream_fmt.findData(getattr(settings, "stream_format", "mkv"))))
+        f.addRow("Save streaming videos as", self.stream_fmt)
+        v.addLayout(f)
+        hint = QLabel("Streaming videos (HLS) arrive in many small pieces. Fetchly joins them and converts the "
+                      "result without re-encoding, so quality stays the same and seeking works.")
+        hint.setObjectName("subtitle")
+        hint.setWordWrap(True)
+        v.addWidget(hint)
+        v.addWidget(separator())
+        self.auto_ffmpeg = QCheckBox("Download ffmpeg automatically if it isn't installed (one time, about 200 MB)")
+        self.auto_ffmpeg.setChecked(getattr(settings, "auto_get_ffmpeg", True))
+        self.auto_ffmpeg.setEnabled(sys.platform == "win32")
+        v.addWidget(self.auto_ffmpeg)
+        self.ffmpeg_status = QLabel()
+        self.ffmpeg_status.setObjectName("subtitle")
+        self.ffmpeg_status.setWordWrap(True)
+        self.ffmpeg_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        v.addWidget(self.ffmpeg_status)
+        v.addLayout(_button_row(left=(_button("Check again", slot=lambda: self._show_ffmpeg(True)),)))
+        self._show_ffmpeg(False)
+        v.addStretch(1)
+        tabs.addTab(vd, "Videos")
+
         # Save to
         sv, v = page()
         f = _form()
@@ -949,6 +988,17 @@ class OptionsDialog(Dialog):
 
         self.body.addLayout(_button_row(_button("Cancel", slot=self.reject), _button("OK", True, self._ok)))
 
+    def _show_ffmpeg(self, refresh):
+        from ..media import find_ffmpeg
+        path = find_ffmpeg(refresh=refresh)
+        if path:
+            self.ffmpeg_status.setText(f"ffmpeg found: {path}")
+        elif sys.platform == "win32":
+            self.ffmpeg_status.setText("ffmpeg isn't installed yet. Fetchly will download it the first time it "
+                                       "converts a video (if the box above is ticked).")
+        else:
+            self.ffmpeg_status.setText("ffmpeg isn't installed. Install it with your package manager to convert videos.")
+
     def _ok(self):
         s = self.s
         proxy = self.proxy.text().strip()
@@ -968,6 +1018,8 @@ class OptionsDialog(Dialog):
         s.speed_limit_enabled = self.limit_on.isChecked()
         s.speed_limit_kb = self.limit.value()
         s.proxy = proxy
+        s.stream_format = self.stream_fmt.currentData()
+        s.auto_get_ffmpeg = self.auto_ffmpeg.isChecked()
         s.download_root = self.root.text().strip() or s.download_root
         s.category_dirs = {k: e.text().strip() for k, e in self.cat_dirs.items() if e.text().strip()}
         s.save()

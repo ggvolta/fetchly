@@ -22,6 +22,33 @@ KEY = os.urandom(16)
 STATS = {"range_requests": 0, "max_parallel": 0, "parallel": 0}
 LOCK = threading.Lock()
 THROTTLE = {"delay": 0.0}
+REAL_DIR = {"path": ""}   # a real HLS stream made with ffmpeg (if installed)
+
+
+def make_real_hls():
+    """Encode a short H.264/AAC clip as an HLS stream so the MKV/MP4 conversion can be tested."""
+    import subprocess
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        return False
+    d = tempfile.mkdtemp(prefix="fetchly-hls-")
+    r = subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25",
+                        "-f", "lavfi", "-i", "sine=frequency=440", "-t", "10", "-c:v", "libx264", "-g", "50",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-f", "hls", "-hls_time", "2", "-hls_list_size", "0",
+                        "-hls_segment_filename", os.path.join(d, "r%03d.ts"), os.path.join(d, "index.m3u8")],
+                       capture_output=True)
+    if r.returncode != 0:
+        return False
+    REAL_DIR["path"] = d
+    return True
+
+
+def probe_streams(path):
+    import subprocess
+    fp = shutil.which("ffprobe")
+    r = subprocess.run([fp, "-v", "error", "-show_entries", "stream=codec_name:format=format_name,duration",
+                        "-of", "default=nw=1:nk=1", path], capture_output=True, text=True)
+    return r.stdout.split()
 
 
 def _encrypt(data, seq):
@@ -96,6 +123,11 @@ class H(BaseHTTPRequestHandler):
             return
         if p == "/missing.zip":
             return self._send(404, b"nope")
+        if p.startswith("/real/") and REAL_DIR["path"]:
+            f = os.path.join(REAL_DIR["path"], os.path.basename(p))
+            if os.path.isfile(f):
+                ct = "application/vnd.apple.mpegurl" if f.endswith(".m3u8") else "video/mp2t"
+                return self._send(200, open(f, "rb").read(), {"Content-Type": ct})
         if p == "/hls/master.m3u8":
             body = ("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nlow.m3u8\n"
                     "#EXT-X-STREAM-INF:BANDWIDTH=2000000\nhigh.m3u8\n").encode()
@@ -137,6 +169,7 @@ def main():
     out = tempfile.mkdtemp(prefix="fetchly-out-")
     s = Settings()
     s.download_root = out
+    s.auto_get_ffmpeg = False   # never fetch ffmpeg during tests
     mgr = DownloadManager(s)
     ok = True
 
@@ -211,6 +244,22 @@ def main():
     got = open(it.saved_path, "rb").read() if it.status == COMPLETE else b""
     check("HLS (encrypted, master playlist) downloads and joins",
           it.status == COMPLETE and (got == expect or it.saved_path.endswith(".mp4")), it.error)
+
+    # 5b. real video stream -> MKV / MP4 / TS (needs ffmpeg)
+    if make_real_hls():
+        for fmt in ("mkv", "mp4", "ts"):
+            s.stream_format = fmt
+            it = wait(mgr, mgr.add(base + "/real/index.m3u8", filename=f"Real {fmt}.ts").id)
+            info = probe_streams(it.saved_path) if it.status == COMPLETE else []
+            left = [f for f in os.listdir(os.path.dirname(it.saved_path) or ".")
+                    if f.startswith(f"Real {fmt}") and f != os.path.basename(it.saved_path)] if it.saved_path else []
+            dur = next((float(x) for x in info if re.match(r"^\d+\.\d+$", x)), 0)
+            check(f"real HLS stream saved as .{fmt} with H.264 + AAC, nothing left over",
+                  it.status == COMPLETE and it.saved_path.endswith("." + fmt) and "h264" in info and "aac" in info
+                  and not left and 9 < dur < 11 and not it.note, f"{it.saved_path} {info} {left} {it.note or it.error}")
+        s.stream_format = "mkv"
+    else:
+        print("SKIP real HLS conversion tests (ffmpeg not installed)")
 
     # 6. queue with max simultaneous
     s.max_simultaneous = 2

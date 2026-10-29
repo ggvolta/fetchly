@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fetchly Download Manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hands browser downloads, links and videos to the Fetchly download manager for faster, resumable downloading.",
   "permissions": ["downloads", "contextMenus", "cookies", "storage", "webRequest", "tabs", "scripting", "alarms"],
   "host_permissions": ["<all_urls>"],

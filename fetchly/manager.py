@@ -110,7 +110,7 @@ class DownloadManager:
             if not it or item_id in self.downloaders or it.status == COMPLETE:
                 return False
             it.status = DOWNLOADING
-            d = Downloader(it, self.glimit, self._on_done, self.settings.dir_for)
+            d = Downloader(it, self.glimit, self._on_done, self.settings.dir_for, settings=self.settings)
             self.downloaders[item_id] = d
             self._samples[item_id] = collections.deque(maxlen=12)
         d.start()

@@ -58,6 +58,9 @@ saves you from starting over.
 - Takes over browser downloads of the file types you choose, with the page's cookies so downloads that need
   you to be signed in still work. Hold **Alt** while clicking a link to let the browser handle that one.
 - Shows a **Download this video** button over videos on web pages (direct video files and HLS streams).
+  Streaming videos are saved as **MKV** (or MP4, in **Options → Videos**), converted without re-encoding so
+  they keep full quality and play and seek smoothly. Fetchly uses ffmpeg for this: it finds an existing copy
+  or downloads one the first time it's needed.
 - Adds **Download with Fetchly**, **Download all links** and **Download selected links** to the right-click
   menu in your browser.
 - Sorts files into Compressed, Documents, Music, Programs and Video, each with its own folder.

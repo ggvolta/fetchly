@@ -6,14 +6,12 @@ still in progress is split in half and the free connection takes the second half
 connection stays busy until the very end. Progress is persisted per segment, so downloads
 resume after a pause, a crash, or a restart of the app.
 
-HLS (.m3u8) streams are downloaded segment-by-segment in parallel and joined (optionally
-remuxed to MP4 when ffmpeg is installed).
+HLS (.m3u8) streams are downloaded segment-by-segment in parallel, joined, and remuxed into
+MKV (or MP4) with ffmpeg, which Fetchly finds on the PC or downloads once when needed.
 """
 import os
 import re
 import shutil
-import subprocess
-import sys
 import threading
 import time
 import urllib.parse
@@ -142,9 +140,10 @@ def probe(session, url):
 class Downloader:
     """Runs one DownloadItem on background threads."""
 
-    def __init__(self, item, global_limiter, on_done, dir_for=None):
+    def __init__(self, item, global_limiter, on_done, dir_for=None, settings=None):
         self.item = item
         self.dir_for = dir_for
+        self.settings = settings
         self.glimit = global_limiter
         self.ilimit = RateLimiter(item.speed_limit_kb * 1024)
         self.on_done = on_done
@@ -466,7 +465,8 @@ class Downloader:
         self._check_stop()
 
         stem = os.path.splitext(it.filename)[0] if it.filename else "video"
-        it.filename = sanitize_filename(stem + (".mp4" if init_url else ".ts"))
+        joined_ext = ".mp4" if init_url else ".ts"   # what the raw pieces add up to
+        it.filename = sanitize_filename(stem + joined_ext)
         self._resolve_dir()
         os.makedirs(it.save_dir, exist_ok=True)
         if not it.part_path or not os.path.isdir(it.part_path):
@@ -556,21 +556,53 @@ class Downloader:
         os.replace(tmp, target)
         shutil.rmtree(it.part_path, ignore_errors=True)
         it.part_path = ""
-        # Remux MPEG-TS to MP4 if ffmpeg is available (lossless, fast)
-        if target.lower().endswith(".ts") and shutil.which("ffmpeg"):
-            mp4 = unique_path(os.path.splitext(target)[0] + ".mp4")
-            flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
-            try:
-                res = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", target, "-c", "copy", mp4],
-                                     capture_output=True, timeout=3600, creationflags=flags)
-                if res.returncode == 0 and os.path.exists(mp4):
-                    os.remove(target)
-                    target = mp4
-            except (OSError, subprocess.SubprocessError):
-                pass
+        target = self._convert_stream(target, sess)
         it.saved_path = target
         it.filename = os.path.basename(target)
         it.size = os.path.getsize(target)
+
+    def _convert_stream(self, joined, sess):
+        """Remux the joined stream into the chosen container. Keeps the joined file if that isn't possible."""
+        from . import media
+        it = self.item
+        fmt = getattr(self.settings, "stream_format", "mkv") if self.settings else "mkv"
+        if fmt not in media.STREAM_FORMATS:
+            fmt = "mkv"
+        if fmt == "ts" or joined.lower().endswith("." + fmt):
+            return joined
+        ffmpeg = media.find_ffmpeg()
+        if not ffmpeg and media.can_download_ffmpeg() and getattr(self.settings, "auto_get_ffmpeg", True):
+            def progress(done, total):
+                pct = f"{done * 100 // total}%" if total else f"{done // (1024 * 1024)} MB"
+                self.hls_status[0] = (done, f"Getting ffmpeg for video conversion (one time only) - {pct}")
+            try:
+                ffmpeg = media.download_ffmpeg(sess, progress, self.stop_event.is_set)
+            except Exception as e:  # noqa: BLE001 - conversion is optional
+                it.note = f"Saved as {os.path.splitext(joined)[1]}: couldn't get ffmpeg ({_short(e)})"
+                ffmpeg = None
+            finally:
+                self.hls_status.pop(0, None)
+        if not ffmpeg:
+            if not getattr(it, "note", ""):
+                it.note = f"Saved as {os.path.splitext(joined)[1]}: ffmpeg not found"
+            return joined
+        dst = os.path.splitext(joined)[0] + "." + fmt
+        if not it.overwrite:
+            dst = unique_path(dst)
+        self.hls_status[0] = (0, f"Converting to {fmt.upper()}...")
+        try:
+            media.remux(ffmpeg, joined, dst, fmt)
+        except Exception as e:  # noqa: BLE001 - keep the joined file rather than fail the download
+            it.note = f"Saved as {os.path.splitext(joined)[1]}: conversion to {fmt.upper()} failed ({_short(e)})"
+            return joined
+        finally:
+            self.hls_status.pop(0, None)
+        try:
+            os.remove(joined)
+        except OSError:
+            pass
+        it.note = ""
+        return dst
 
     def _fetch_bytes(self, sess, url, wid, i, total):
         r = sess.get(url, stream=True, timeout=TIMEOUT)

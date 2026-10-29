@@ -43,7 +43,7 @@ class DownloadItem:
     SAVED = ("id", "url", "filename", "save_dir", "category", "size", "resumable", "status", "referrer",
              "cookies", "user_agent", "auth_user", "auth_pass", "description", "added", "last_try",
              "completed_at", "saved_path", "error", "in_queue", "max_connections", "speed_limit_kb",
-             "kind", "part_path", "overwrite", "auto_dir", "hls_done", "hls_total", "hls_bytes", "queue_order")
+             "kind", "part_path", "overwrite", "auto_dir", "hls_done", "hls_total", "hls_bytes", "queue_order", "note")
 
     def __init__(self, url, filename="", save_dir="", category="General"):
         self.id = uuid.uuid4().hex[:12]
@@ -77,6 +77,7 @@ class DownloadItem:
         self.hls_total = 0
         self.hls_bytes = 0
         self.queue_order = 0
+        self.note = ""              # e.g. why a stream was kept as .ts
         # runtime only
         self.speed = 0.0
         self.eta = -1

@@ -72,6 +72,8 @@ class Settings:
     proxy: str = ""                # "" = use the Windows/system proxy; or http://host:port, socks5://host:port
     first_run: bool = True
     hidden_columns: list = field(default_factory=list)
+    stream_format: str = "mkv"     # container for streaming (HLS) videos: mkv / mp4 / ts
+    auto_get_ffmpeg: bool = True   # download ffmpeg once if it isn't installed (Windows)
 
     def dir_for(self, category):
         custom = self.category_dirs.get(category)
