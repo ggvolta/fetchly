@@ -6,7 +6,7 @@ SetCompressor /SOLID lzma
 !define APPNAME   "Fetchly"
 !define SHORTNAME "Fetchly"
 !ifndef VERSION
-  !define VERSION "1.1.1"
+  !define VERSION "1.1.2"
 !endif
 !define PUBLISHER "ggvolta"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Fetchly"

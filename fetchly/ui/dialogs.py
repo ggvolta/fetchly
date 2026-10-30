@@ -77,13 +77,23 @@ def _browse_row(edit, parent, title, save_file=False):
 
 
 class Dialog(QDialog):
+    """Base dialog. With no parent it becomes an independent window, like IDM's download windows: its own
+    taskbar button and minimize button, and it isn't hidden or minimized along with the main window."""
+
     def __init__(self, parent=None, title="", on_top=False):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setWindowIcon(icons.app_icon())
-        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
-        if on_top:
-            self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        if parent is None:
+            flags = (Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint
+                     | Qt.WindowCloseButtonHint)
+            if on_top:
+                flags |= Qt.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
+        else:
+            self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+            if on_top:
+                self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.body = QVBoxLayout(self)
         self.body.setContentsMargins(22, 18, 22, 18)
         self.body.setSpacing(12)
@@ -846,7 +856,7 @@ class OptionsDialog(Dialog):
                          ("show_catch_dialog", "Ask where to save before each download (Download File Info)"),
                          ("show_progress_dialog", "Show the progress window when a download starts"),
                          ("show_complete_dialog", "Show the Download complete dialog"),
-                         ("minimize_to_tray", "Keep Fetchly running in the notification area when closed")):
+                         ("minimize_to_tray", "Keep Fetchly in the system tray when the window is closed or minimized")):
             c = QCheckBox(txt)
             c.setChecked(getattr(settings, key))
             self.chk[key] = c

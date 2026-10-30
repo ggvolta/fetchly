@@ -7,7 +7,7 @@ import subprocess
 import sys
 import time
 
-from PySide6.QtCore import QAbstractTableModel, QByteArray, QItemSelectionModel, QModelIndex, QSize, Qt, QTimer
+from PySide6.QtCore import QAbstractTableModel, QByteArray, QEvent, QItemSelectionModel, QModelIndex, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QGuiApplication, QKeySequence, QPainter
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QFileDialog, QHBoxLayout, QHeaderView,
                                QLabel, QMainWindow, QMenu, QMessageBox, QSizePolicy, QSplitter, QSystemTrayIcon,
@@ -549,7 +549,7 @@ class MainWindow(QMainWindow):
             if kind == "catch":
                 self.catch(ev[1])
             elif kind == "catch_batch":
-                self._show_dialog(D.LinksDialog(self, self.m, self.s, ev[1]))
+                self._show_dialog(D.LinksDialog(None, self.m, self.s, ev[1]))
             elif kind == "show":
                 self.bring_to_front()
             elif kind == "started":
@@ -583,7 +583,7 @@ class MainWindow(QMainWindow):
             except OSError:
                 pass
         if self.s.show_complete_dialog:
-            self._show_dialog(D.CompleteDialog(self, self.m, self.s, it))
+            self._show_dialog(D.CompleteDialog(None, self.m, self.s, it))
         elif self.tray:
             self.tray.showMessage("Download complete", it.filename, QSystemTrayIcon.Information)
 
@@ -598,7 +598,8 @@ class MainWindow(QMainWindow):
                                   "Fetchly finished downloading. Windows will shut down in 1 minute."],
                                  creationflags=0x08000000)
                 box = QMessageBox(QMessageBox.Information, APP_TITLE,
-                                  "Downloads finished. The computer will shut down in 1 minute.", parent=self)
+                                  "Downloads finished. The computer will shut down in 1 minute.",
+                                  parent=self._owner())
                 cancel = box.addButton("Cancel shutdown", QMessageBox.RejectRole)
                 box.addButton(QMessageBox.Ok)
                 box.exec()
@@ -621,7 +622,7 @@ class MainWindow(QMainWindow):
                        payload.get("cookies", ""), payload.get("userAgent", ""), auth=payload.get("auth"),
                        kind=payload.get("kind") or None)
             return
-        self._show_dialog(D.DownloadInfoDialog(self, self.m, self.s, payload))
+        self._show_dialog(D.DownloadInfoDialog(None, self.m, self.s, payload))
 
     def _clipboard_changed(self):
         if not self.s.monitor_clipboard:
@@ -685,12 +686,12 @@ class MainWindow(QMainWindow):
 
     # ================================================================== actions
     def add_url(self):
-        dlg = D.AddUrlDialog(self)
+        dlg = D.AddUrlDialog(self._owner())
         if dlg.exec():
             self.catch(dlg.payload())
 
     def batch_download(self):
-        D.BatchDownloadDialog(self, self.m, self.s).exec()
+        D.BatchDownloadDialog(self._owner(), self.m, self.s).exec()
 
     def resume_selected(self):
         for i in self.selected_ids():
@@ -761,7 +762,7 @@ class MainWindow(QMainWindow):
     def show_progress(self, item_id):
         dlg = self.progress.get(item_id)
         if dlg is None or not alive(dlg):
-            dlg = D.ProgressDialog(self, self.m, self.s, item_id)
+            dlg = D.ProgressDialog(None, self.m, self.s, item_id)
             self.progress[item_id] = dlg
         dlg.show()
         dlg.raise_()
@@ -810,7 +811,7 @@ class MainWindow(QMainWindow):
         if not urls:
             QMessageBox.information(self, APP_TITLE, "No download links were found in that file.")
             return
-        self._show_dialog(D.LinksDialog(self, self.m, self.s, {"links": [{"url": u} for u in urls],
+        self._show_dialog(D.LinksDialog(None, self.m, self.s, {"links": [{"url": u} for u in urls],
                                                                "pageUrl": path}))
 
     def export_links(self):
@@ -882,15 +883,32 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def _owner(self):
+        """Parent for dialogs opened from the menus: the main window when it's on screen, otherwise none, so a
+        dialog opened from the tray icon gets its own taskbar button instead of hiding behind other windows."""
+        return self if self.isVisible() and not self.isMinimized() else None
+
+    def send_to_tray(self):
+        self.hide()
+        # forget the minimized state so the window comes back normal when opened from the tray
+        self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
+        if self.tray and not self.s.tray_hint_shown:
+            self.tray.showMessage(APP_TITLE, "Fetchly keeps running here and catches your downloads. "
+                                  "Click this icon to open it.", QSystemTrayIcon.Information)
+            self.s.tray_hint_shown = True
+        self._save_layout()
+
+    def changeEvent(self, e):
+        # Minimizing goes to the tray (like IDM), not the taskbar; download windows stay where they are.
+        if (e.type() == QEvent.WindowStateChange and self.isMinimized() and not self._quitting
+                and self.s.minimize_to_tray and self.tray):
+            QTimer.singleShot(0, self.send_to_tray)
+        super().changeEvent(e)
+
     def closeEvent(self, e):
         if not self._quitting and self.s.minimize_to_tray and self.tray:
             e.ignore()
-            self.hide()
-            if not self.s.tray_hint_shown:
-                self.tray.showMessage(APP_TITLE, "Fetchly is still running here so it can catch your downloads.",
-                                      QSystemTrayIcon.Information)
-                self.s.tray_hint_shown = True
-            self._save_layout()
+            self.send_to_tray()
             return
         if not self._quitting:
             e.ignore()
