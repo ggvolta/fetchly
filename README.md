@@ -81,12 +81,12 @@ saves you from starting over.
 
 ## Install
 
-1. Download **Fetchly-Setup-1.0.0.exe** from the [latest release](https://github.com/ggvolta/fetchly/releases/latest).
+1. Download the **Fetchly-Setup** file from the [latest release](https://github.com/ggvolta/fetchly/releases/latest).
    It needs 64-bit Windows 10 or 11.
 2. Run it. The installer isn't code-signed yet, so Windows SmartScreen may warn you: choose
    **More info**, then **Run anyway**.
 
-To skip the installer, download **Fetchly-1.0.0-portable.zip**, unzip it anywhere and run `Fetchly.exe`.
+To skip the installer, download the **portable** zip, unzip it anywhere and run `Fetchly.exe`.
 
 ## Browser extension
 

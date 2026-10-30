@@ -29,12 +29,12 @@
         .btn:hover { background:#2A2E7A; }
         .x { margin-left:4px; opacity:.75; font-weight:400; padding:0 2px; }
         .x:hover { opacity:1; }
-        .menu { position:absolute; top:100%; right:0; margin-top:4px; background:#fff; color:#1f2933;
-                border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,.3); min-width:300px; max-width:460px;
-                padding:4px 0; display:none; }
+        .menu { position:absolute; right:0; background:#fff; color:#1f2933; border-radius:6px;
+                box-shadow:0 4px 16px rgba(0,0,0,.3); min-width:300px; max-width:460px; padding:4px 0;
+                display:none; overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
         .menu.open { display:block; }
         .item { padding:7px 12px; cursor:pointer; display:flex; justify-content:space-between; gap:12px; }
-        .item:hover { background:#e3f0fd; }
+        .item:hover, .item:focus { background:#EEF0FC; outline:none; }
         .k { color:#5c6b7a; font-size:12px; white-space:nowrap; }
         .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .toast { position:fixed; right:16px; bottom:16px; background:#263238; color:#fff; padding:10px 14px;
@@ -58,12 +58,47 @@
         return;
       }
       if (items.length === 1) download(items[0]);
-      else menu.classList.toggle("open");
+      else if (menu.classList.contains("open")) closeMenu();
+      else { menu.classList.add("open"); placeMenu(); }
     });
+    // close the list when clicking anywhere else on the page, or with Esc
+    document.addEventListener("mousedown", (e) => {
+      if (menu.classList.contains("open") && !e.composedPath().includes(host)) closeMenu();
+    }, true);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && menu.classList.contains("open")) closeMenu();
+    }, true);
     document.documentElement.appendChild(host);
     timer = setInterval(position, 500);
     window.addEventListener("scroll", position, { passive: true });
     window.addEventListener("resize", position);
+  }
+
+  function closeMenu() {
+    menu.classList.remove("open");
+  }
+
+  // Open the list on whichever side of the button has room (above it when the button sits near the
+  // bottom of the window), keep it inside the window, and let it scroll when there are many videos.
+  function placeMenu() {
+    if (!menu || !menu.classList.contains("open")) return;
+    const gap = 6, edge = 8;
+    const b = btn.getBoundingClientRect();
+    const scroll = menu.scrollTop;
+    menu.style.maxHeight = "none";
+    menu.style.width = Math.min(460, innerWidth - edge * 2) + "px";
+    const natural = menu.scrollHeight;
+    const below = innerHeight - b.bottom - gap - edge;
+    const above = b.top - gap - edge;
+    const down = natural <= below || below >= above;
+    menu.style.top = down ? `calc(100% + ${gap}px)` : "auto";
+    menu.style.bottom = down ? "auto" : `calc(100% + ${gap}px)`;
+    menu.style.maxHeight = Math.max(80, down ? below : above) + "px";
+    menu.scrollTop = scroll;
+    // keep it from running off the left edge on narrow windows
+    const w = menu.offsetWidth;
+    if (b.right - w < edge) { menu.style.right = "auto"; menu.style.left = (edge - b.left) + "px"; }
+    else { menu.style.left = "auto"; menu.style.right = "0"; }
   }
 
   function label(m) {
@@ -83,11 +118,13 @@
       const [t, k] = label(m);
       const row = document.createElement("div");
       row.className = "item";
+      row.tabIndex = 0;
       row.innerHTML = `<span class="t"></span><span class="k"></span>`;
       row.firstChild.textContent = `${i + 1}. ${t}`;
       row.lastChild.textContent = k;
       row.title = m.url;
-      row.addEventListener("click", () => { menu.classList.remove("open"); download(m); });
+      row.addEventListener("click", () => { closeMenu(); download(m); });
+      row.addEventListener("keydown", (e) => { if (e.key === "Enter") { closeMenu(); download(m); } });
       menu.appendChild(row);
     });
     position();
@@ -117,6 +154,7 @@
       wrap.style.right = "16px";
       wrap.style.bottom = "16px";
     }
+    placeMenu();
   }
 
   function showToast(text) {
