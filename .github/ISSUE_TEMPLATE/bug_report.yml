@@ -14,14 +14,16 @@ body:
     attributes:
       label: Fetchly version
       description: Shown in Help › About Fetchly
-      placeholder: "1.1.2"
+      placeholder: "1.2.0"
     validations:
       required: true
   - type: input
-    id: windows
+    id: system
     attributes:
-      label: Windows version
-      placeholder: Windows 11 24H2
+      label: Operating system
+      placeholder: Windows 11 24H2, or Ubuntu 24.04 (GNOME)
+    validations:
+      required: true
   - type: input
     id: browser
     attributes:
@@ -35,5 +37,5 @@ body:
     id: log
     attributes:
       label: Error log
-      description: Paste the contents of %APPDATA%\Fetchly\error.log if the file exists.
+      description: 'Paste the contents of error.log if the file exists. Windows: %APPDATA%\Fetchly\error.log. Linux: ~/.config/Fetchly/error.log.'
       render: text

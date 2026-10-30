@@ -10,15 +10,31 @@ import os
 import shutil
 import subprocess
 import sys
+import platform
+import tarfile
 import threading
 import zipfile
 
 from .config import app_data_dir
+from .utils import child_env
 
 NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
 EXE = ".exe" if sys.platform == "win32" else ""
-FFMPEG_ZIP_URL = ("https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/"
-                  "ffmpeg-master-latest-win64-gpl.zip")
+_FFMPEG_BASE = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/"
+FFMPEG_ZIP_URL = _FFMPEG_BASE + "ffmpeg-master-latest-win64-gpl.zip"
+
+
+def _ffmpeg_download_url():
+    """Static ffmpeg build for this system, or None if there isn't one."""
+    machine = platform.machine().lower()
+    if sys.platform == "win32" and machine in ("amd64", "x86_64"):
+        return FFMPEG_ZIP_URL
+    if sys.platform.startswith("linux"):
+        if machine in ("x86_64", "amd64"):
+            return _FFMPEG_BASE + "ffmpeg-master-latest-linux64-gpl.tar.xz"
+        if machine in ("aarch64", "arm64"):
+            return _FFMPEG_BASE + "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
+    return None
 STREAM_FORMATS = ("mkv", "mp4", "ts")
 
 _cache = {"path": None, "checked": False}
@@ -62,7 +78,7 @@ def _candidates():
 def _works(path):
     try:
         r = subprocess.run([path, "-hide_banner", "-version"], capture_output=True, timeout=20,
-                           creationflags=NO_WINDOW)
+                           creationflags=NO_WINDOW, env=child_env())
         return r.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
@@ -88,26 +104,29 @@ def find_ffmpeg(refresh=False):
 
 
 def can_download_ffmpeg():
-    return sys.platform == "win32"
+    return _ffmpeg_download_url() is not None
 
 
 def download_ffmpeg(session, progress=None, should_stop=None):
-    """Fetch ffmpeg.exe into Fetchly's data folder (Windows). Returns its path or raises."""
+    """Fetch a static ffmpeg build into Fetchly's data folder. Returns its path or raises."""
     with _download_lock:
         existing = find_ffmpeg(refresh=True)
         if existing:
             return existing
-        if not can_download_ffmpeg():
+        url = _ffmpeg_download_url()
+        if not url:
             raise RuntimeError("Install ffmpeg with your package manager")
         dest_dir = own_ffmpeg_dir()
         os.makedirs(dest_dir, exist_ok=True)
-        zpath = os.path.join(dest_dir, "ffmpeg-download.zip")
+        archive = os.path.join(dest_dir, "ffmpeg-download" + (".zip" if url.endswith(".zip") else ".tar.xz"))
+        target = os.path.join(dest_dir, "ffmpeg" + EXE)
+        tmp = target + ".tmp"
         try:
-            with session.get(FFMPEG_ZIP_URL, stream=True, timeout=60) as r:
+            with session.get(url, stream=True, timeout=60) as r:
                 r.raise_for_status()
                 total = int(r.headers.get("Content-Length") or 0)
                 done = 0
-                with open(zpath, "wb") as f:
+                with open(archive, "wb") as f:
                     for chunk in r.iter_content(256 * 1024):
                         if should_stop and should_stop():
                             raise InterruptedError()
@@ -115,19 +134,28 @@ def download_ffmpeg(session, progress=None, should_stop=None):
                         done += len(chunk)
                         if progress:
                             progress(done, total)
-            with zipfile.ZipFile(zpath) as z:
-                member = next((n for n in z.namelist() if n.replace("\\", "/").endswith("/bin/ffmpeg.exe")), None)
-                if not member:
-                    raise RuntimeError("ffmpeg.exe not found in the download")
-                tmp = os.path.join(dest_dir, "ffmpeg.exe.tmp")
-                with z.open(member) as src, open(tmp, "wb") as out:
-                    shutil.copyfileobj(src, out, 1024 * 1024)
-                os.replace(tmp, os.path.join(dest_dir, "ffmpeg.exe"))
+            if archive.endswith(".zip"):
+                with zipfile.ZipFile(archive) as z:
+                    member = next((n for n in z.namelist() if n.replace("\\", "/").endswith("/bin/ffmpeg.exe")), None)
+                    if not member:
+                        raise RuntimeError("ffmpeg.exe not found in the download")
+                    with z.open(member) as src, open(tmp, "wb") as out:
+                        shutil.copyfileobj(src, out, 1024 * 1024)
+            else:
+                with tarfile.open(archive, "r:xz") as t:
+                    member = next((m for m in t.getmembers() if m.isfile() and m.name.endswith("/bin/ffmpeg")), None)
+                    if not member:
+                        raise RuntimeError("ffmpeg not found in the download")
+                    with t.extractfile(member) as src, open(tmp, "wb") as out:
+                        shutil.copyfileobj(src, out, 1024 * 1024)
+                os.chmod(tmp, 0o755)
+            os.replace(tmp, target)
         finally:
-            try:
-                os.remove(zpath)
-            except OSError:
-                pass
+            for leftover in (archive, tmp):
+                try:
+                    os.remove(leftover)
+                except OSError:
+                    pass
         path = find_ffmpeg(refresh=True)
         if not path:
             raise RuntimeError("Downloaded ffmpeg doesn't run")
@@ -148,7 +176,7 @@ def remux(ffmpeg, src, dst, fmt):
     tmp = dst + ".fetchlypart"
     args += ["-f", "matroska" if fmt == "mkv" else "mp4", tmp]
     try:
-        res = subprocess.run(args, capture_output=True, timeout=3 * 3600, creationflags=NO_WINDOW)
+        res = subprocess.run(args, capture_output=True, timeout=3 * 3600, creationflags=NO_WINDOW, env=child_env())
         if res.returncode != 0:
             msg = (res.stderr or b"").decode("utf-8", "replace").strip().splitlines()
             raise RuntimeError(msg[-1] if msg else f"ffmpeg exited with {res.returncode}")

@@ -11,7 +11,10 @@ Each [release](https://github.com/ggvolta/fetchly/releases) contains Windows fil
 [GitHub Actions](.github/workflows/release.yml) directly from the source code in this repository:
 
 - `Fetchly.exe`, the application, inside the installer and the portable zip
-- `Fetchly-Setup-<version>.exe`, the installer
+- `Fetchly-Windows-Setup.exe`, the installer
+
+The Linux AppImage is built the same way but isn't code-signed, because Linux doesn't use Windows-style
+signatures.
 
 Only files produced by that automated build are submitted for signing. Nothing built on a personal computer is
 signed. The file's product name is always *Fetchly* and its version matches the release.

@@ -15,9 +15,11 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QFile
 
 from ..config import APP_TITLE, app_data_dir
 from ..models import COMPLETE, ERROR, QUEUED
-from ..utils import (CATEGORIES, filename_from_url, human_size, human_speed, human_time, looks_like_url,
+from ..utils import (CATEGORIES, IS_LINUX, child_env, install_menu_entry, menu_entry_installed, remove_menu_entry,
+                     filename_from_url, human_size, human_speed, human_time, looks_like_url,
                      matches_types, open_folder, open_path, open_with, set_autostart)
 from . import dialogs as D
+from .dialogs import message_box
 from . import icons, theme
 from .widgets import ROLE_COUNT, ROLE_STATUS, SearchBox, SidebarDelegate, StatusDelegate
 
@@ -467,8 +469,25 @@ class MainWindow(QMainWindow):
 
     def _build_tray(self):
         self.tray = None
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            return
+        self._tray_wait = 0
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self._create_tray()
+        else:
+            # At sign-in the desktop's tray area can appear a few seconds after Fetchly starts; keep checking
+            self._tray_timer = QTimer(self)
+            self._tray_timer.timeout.connect(self._wait_for_tray)
+            self._tray_timer.start(2000)
+
+    def _wait_for_tray(self):
+        self._tray_wait += 1
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self._tray_timer.stop()
+            self._create_tray()
+            self._tray_active = None
+        elif self._tray_wait >= 30:
+            self._tray_timer.stop()
+
+    def _create_tray(self):
         self.tray = QSystemTrayIcon(icons.tray_icon(False), self)
         menu = QMenu()
         show = menu.addAction("Open Fetchly")
@@ -597,7 +616,7 @@ class MainWindow(QMainWindow):
                 subprocess.Popen(["shutdown", "/s", "/t", "60", "/c",
                                   "Fetchly finished downloading. Windows will shut down in 1 minute."],
                                  creationflags=0x08000000)
-                box = QMessageBox(QMessageBox.Information, APP_TITLE,
+                box = message_box(QMessageBox.Information, APP_TITLE,
                                   "Downloads finished. The computer will shut down in 1 minute.",
                                   parent=self._owner())
                 cancel = box.addButton("Cancel shutdown", QMessageBox.RejectRole)
@@ -606,7 +625,18 @@ class MainWindow(QMainWindow):
                 if box.clickedButton() is cancel:
                     subprocess.Popen(["shutdown", "/a"], creationflags=0x08000000)
             else:
-                subprocess.Popen(["shutdown", "-h", "+1"])
+                self._poweroff_timer = QTimer(self)
+                self._poweroff_timer.setSingleShot(True)
+                self._poweroff_timer.timeout.connect(power_off)
+                self._poweroff_timer.start(60_000)
+                box = message_box(QMessageBox.Information, APP_TITLE,
+                                  "Downloads finished. The computer will shut down in 1 minute.",
+                                  parent=self._owner())
+                cancel = box.addButton("Cancel shutdown", QMessageBox.RejectRole)
+                box.addButton(QMessageBox.Ok)
+                box.exec()
+                if box.clickedButton() is cancel:
+                    self._poweroff_timer.stop()
 
     def _show_dialog(self, dlg):
         self._dialogs = [d for d in self._dialogs if alive(d)]
@@ -705,7 +735,7 @@ class MainWindow(QMainWindow):
         ids = self.selected_ids()
         if not ids:
             return
-        box = QMessageBox(QMessageBox.Question, "Delete downloads",
+        box = message_box(QMessageBox.Question, "Delete downloads",
                           f"Delete {len(ids)} download{'s' if len(ids) > 1 else ''} from the list?", parent=self)
         chk = QCheckBox("Also delete the downloaded files from disk")
         box.setCheckBox(chk)
@@ -719,7 +749,7 @@ class MainWindow(QMainWindow):
         n = sum(1 for it in self.m.items.values() if it.status == COMPLETE)
         if not n:
             return
-        box = QMessageBox(QMessageBox.Question, "Delete completed",
+        box = message_box(QMessageBox.Question, "Delete completed",
                           f"Remove {n} completed download{'s' if n > 1 else ''} from the list?", parent=self)
         box.setInformativeText("The files stay on your computer.")
         ok = box.addButton("Remove", QMessageBox.AcceptRole)
@@ -769,7 +799,18 @@ class MainWindow(QMainWindow):
 
     def options(self):
         old_auto, old_theme = self.s.start_with_system, self.s.theme
-        if D.OptionsDialog(self, self.s).exec():
+        old_menu = menu_entry_installed()
+        dlg = D.OptionsDialog(self, self.s)
+        if dlg.exec():
+            want_menu = getattr(dlg, "menu_entry", None)
+            if want_menu is not None and want_menu.isChecked() != old_menu:
+                try:
+                    if want_menu.isChecked():
+                        add_to_app_menu()
+                    else:
+                        remove_menu_entry()
+                except OSError as e:
+                    QMessageBox.warning(self, APP_TITLE, f"Couldn't change the applications menu:\n{e}")
             self.m.apply_speed_limit()
             if self.s.start_with_system != old_auto:
                 try:
@@ -910,6 +951,21 @@ class MainWindow(QMainWindow):
             e.ignore()
             self.send_to_tray()
             return
+        if not self._quitting and self.s.minimize_to_tray and not self.tray:
+            # No tray on this desktop (for example GNOME without the AppIndicator extension): stay in the
+            # taskbar so Fetchly keeps catching downloads, and explain once.
+            e.ignore()
+            self.showMinimized()
+            if not self.s.no_tray_hint_shown:
+                self.s.no_tray_hint_shown = True
+                self._save_layout()
+                box = message_box(QMessageBox.Information, APP_TITLE, "Fetchly is still running.", parent=None)
+                box.setInformativeText(
+                    "Your desktop doesn't show tray icons, so Fetchly stays in the taskbar to keep catching your "
+                    "downloads. To quit, use Tasks > Exit.\n\nOn GNOME, the AppIndicator and KStatusNotifierItem "
+                    "extension adds tray icons.")
+                box.exec()
+            return
         if not self._quitting:
             e.ignore()
             self.quit_app()
@@ -927,7 +983,7 @@ class MainWindow(QMainWindow):
 
     def quit_app(self, force=False):
         if not force and self.m.active_count():
-            box = QMessageBox(QMessageBox.Question, "Exit Fetchly", "Downloads are in progress.",
+            box = message_box(QMessageBox.Question, "Exit Fetchly", "Downloads are in progress.",
                               parent=self if self.isVisible() else None)
             box.setInformativeText("They will be paused and you can resume them later.")
             ok = box.addButton("Exit", QMessageBox.AcceptRole)
@@ -946,9 +1002,35 @@ class MainWindow(QMainWindow):
         QApplication.quit()
 
 
-def launch_command():
+def program_command():
+    """Command that starts this copy of Fetchly (quoted for a .desktop file or the Windows Run key)."""
+    appimage = os.environ.get("APPIMAGE")
+    if appimage and IS_LINUX:
+        return f'"{appimage}"'
     if getattr(sys, "frozen", False):
-        return f'"{sys.executable}" --tray'
+        return f'"{sys.executable}"'
     exe = sys.executable.replace("python.exe", "pythonw.exe")
     main = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "main.py")
-    return f'"{exe}" "{main}" --tray'
+    return f'"{exe}" "{main}"'
+
+
+def launch_command():
+    return program_command() + " --tray"
+
+
+def add_to_app_menu():
+    """Linux: add Fetchly to the applications menu, with its icon."""
+    png = os.path.join(app_data_dir(), "ui", "fetchly-256.png")
+    os.makedirs(os.path.dirname(png), exist_ok=True)
+    icons.logo_pixmap(256, 1).save(png)
+    install_menu_entry(program_command(), png)
+
+
+def power_off():
+    for cmd in (["systemctl", "poweroff"], ["loginctl", "poweroff"], ["shutdown", "-h", "now"]):
+        if shutil.which(cmd[0]):
+            try:
+                subprocess.Popen(cmd, env=child_env(), start_new_session=True)
+                return
+            except OSError:
+                continue

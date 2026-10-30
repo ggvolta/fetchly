@@ -1,5 +1,5 @@
 @echo off
-REM Developer build on Windows: produces dist\Fetchly\Fetchly.exe and (if NSIS is installed) dist\Fetchly-Setup.exe
+REM Developer build on Windows: produces dist\Fetchly\Fetchly.exe and (if NSIS is installed) dist\Fetchly-Windows-Setup.exe
 cd /d "%~dp0\.."
 python -m pip install -r requirements.txt pyinstaller pillow || exit /b 1
 python tools\sync_version.py || exit /b 1
@@ -9,5 +9,5 @@ python -m PyInstaller --noconfirm --clean --windowed --name Fetchly --icon asset
   --exclude-module tkinter --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtQml main.py || exit /b 1
 xcopy /E /I /Y extension dist\Fetchly\extension >nul
 copy /Y packaging\THIRD-PARTY-NOTICES.txt dist\Fetchly\ >nul
-where makensis >nul 2>nul && (cd packaging && makensis installer.nsi)
+where makensis >nul 2>nul && (cd packaging && makensis /DOUTFILE=..\dist\Fetchly-Windows-Setup.exe installer.nsi)
 echo Done. See the dist folder.

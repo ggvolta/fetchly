@@ -1,2 +1,2 @@
-"""Fetchly: a multi-connection download manager for Windows."""
-__version__ = "1.1.2"
+"""Fetchly: a multi-connection download manager for Windows and Linux."""
+__version__ = "1.2.0"

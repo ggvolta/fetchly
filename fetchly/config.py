@@ -32,8 +32,42 @@ def base_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def extension_dir():
+def bundled_extension_dir():
     return os.path.join(base_dir(), "extension")
+
+
+def extension_dir():
+    """Folder to load the browser extension from.
+
+    On Linux the AppImage is mounted at a different temporary path on every launch, so a browser that loaded
+    the extension from inside it would lose it after a restart. Keep a stable copy in the user's data folder."""
+    src = bundled_extension_dir()
+    if not (sys.platform.startswith("linux") and getattr(sys, "frozen", False)):
+        return src
+    data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    dst = os.path.join(data, APP_NAME, "extension")
+    return dst if os.path.isdir(dst) or not os.path.isdir(src) else sync_extension(src, dst)
+
+
+def sync_extension(src=None, dst=None):
+    """Copy the bundled extension to its stable folder when it's missing or from an older version."""
+    import shutil
+    src = src or bundled_extension_dir()
+    if dst is None:
+        data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+        dst = os.path.join(data, APP_NAME, "extension")
+    try:
+        def version(d):
+            try:
+                with open(os.path.join(d, "manifest.json"), encoding="utf-8") as f:
+                    return json.load(f).get("version")
+            except (OSError, ValueError):
+                return None
+        if os.path.isdir(src) and version(src) != version(dst):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+    except OSError:
+        return src
+    return dst
 
 
 def default_download_root():
@@ -68,12 +102,14 @@ class Settings:
     splitter_state: str = ""
     header_state: str = ""
     tray_hint_shown: bool = False
+    no_tray_hint_shown: bool = False
+    menu_entry_asked: bool = False
     theme: str = "system"          # system / light / dark
-    proxy: str = ""                # "" = use the Windows/system proxy; or http://host:port, socks5://host:port
+    proxy: str = ""                # "" = use the system proxy; or http://host:port, socks5://host:port
     first_run: bool = True
     hidden_columns: list = field(default_factory=list)
     stream_format: str = "mkv"     # container for streaming (HLS) videos: mkv / mp4 / ts
-    auto_get_ffmpeg: bool = True   # download ffmpeg once if it isn't installed (Windows)
+    auto_get_ffmpeg: bool = True   # download ffmpeg once if it isn't installed (Windows and Linux)
 
     def dir_for(self, category):
         custom = self.category_dirs.get(category)

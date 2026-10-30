@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fetchly
+GenericName=Download Manager
+Comment=Faster downloads with many connections at once, and resume when they break
+Exec=Fetchly %U
+Icon=io.github.ggvolta.Fetchly
+Terminal=false
+Categories=Network;FileTransfer;
+Keywords=download;downloader;accelerator;manager;
+StartupWMClass=io.github.ggvolta.Fetchly

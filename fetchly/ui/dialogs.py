@@ -18,9 +18,9 @@ from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComb
 from ..config import APP_TITLE, VERSION, extension_dir
 from ..engine import make_session, probe
 from ..models import COMPLETE, ERROR
-from ..utils import (CATEGORIES, DEFAULT_INTERCEPT_TYPES, category_for, filename_from_url, human_size, human_speed,
-                     human_time, is_hls_url, looks_like_url, matches_types, open_folder, open_path, open_with,
-                     sanitize_filename)
+from ..utils import (CATEGORIES, DEFAULT_INTERCEPT_TYPES, IS_LINUX, IS_WINDOWS, OS_NAME, category_for, child_env,
+                     filename_from_url, human_size, human_speed, human_time, is_hls_url, looks_like_url,
+                     matches_types, open_folder, open_path, open_with, sanitize_filename)
 from . import icons, theme
 from .widgets import SegmentBar, header, separator
 
@@ -76,6 +76,14 @@ def _browse_row(edit, parent, title, save_file=False):
     return row
 
 
+def message_box(icon, title, text, parent=None):
+    """QMessageBox that blocks only its parent window (download windows stay usable)."""
+    box = QMessageBox(icon, title, text, parent=parent)
+    if parent is not None:
+        box.setWindowModality(Qt.WindowModal)
+    return box
+
+
 class Dialog(QDialog):
     """Base dialog. With no parent it becomes an independent window, like IDM's download windows: its own
     taskbar button and minimize button, and it isn't hidden or minimized along with the main window."""
@@ -94,6 +102,9 @@ class Dialog(QDialog):
             self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
             if on_top:
                 self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+            # Block only the main window while open, never the independent download windows: a download that
+            # arrives while Options or Browser integration is open must still be clickable.
+            self.setWindowModality(Qt.WindowModal)
         self.body = QVBoxLayout(self)
         self.body.setContentsMargins(22, 18, 22, 18)
         self.body.setSpacing(12)
@@ -861,14 +872,20 @@ class OptionsDialog(Dialog):
             c.setChecked(getattr(settings, key))
             self.chk[key] = c
             v.addWidget(c)
-        self.autostart = QCheckBox("Start Fetchly when I sign in to Windows")
+        self.autostart = QCheckBox(f"Start Fetchly in the tray when I sign in to {OS_NAME}")
         self.autostart.setChecked(settings.start_with_system)
-        self.autostart.setEnabled(sys.platform == "win32")
+        self.autostart.setEnabled(IS_WINDOWS or IS_LINUX)
         v.addWidget(self.autostart)
+        self.menu_entry = None
+        if IS_LINUX and getattr(sys, "frozen", False):
+            from ..utils import menu_entry_installed
+            self.menu_entry = QCheckBox("Show Fetchly in the applications menu")
+            self.menu_entry.setChecked(menu_entry_installed())
+            v.addWidget(self.menu_entry)
         v.addWidget(separator())
         f = _form()
         self.theme = QComboBox()
-        for label, val in (("Use Windows setting", "system"), ("Light", "light"), ("Dark", "dark")):
+        for label, val in ((f"Use {OS_NAME} setting", "system"), ("Light", "light"), ("Dark", "dark")):
             self.theme.addItem(label, val)
         self.theme.setCurrentIndex(max(0, self.theme.findData(settings.theme)))
         f.addRow("Appearance", self.theme)
@@ -936,7 +953,7 @@ class OptionsDialog(Dialog):
         v.addWidget(separator())
         f = _form()
         self.proxy = QLineEdit(settings.proxy)
-        self.proxy.setPlaceholderText("Use Windows proxy settings")
+        self.proxy.setPlaceholderText("Use system proxy settings")
         f.addRow("Proxy", self.proxy)
         v.addLayout(f)
         hint = QLabel("Leave empty to use the system proxy, or enter e.g. http://127.0.0.1:8080 "
@@ -952,7 +969,7 @@ class OptionsDialog(Dialog):
         f = _form()
         self.stream_fmt = QComboBox()
         for label, val in (("MKV (recommended: plays smoothly in VLC and most players)", "mkv"),
-                           ("MP4 (best for phones, TVs and Windows Media Player)", "mp4"),
+                           ("MP4 (best for phones, TVs and built-in players)", "mp4"),
                            ("TS (keep the raw stream, no conversion)", "ts")):
             self.stream_fmt.addItem(label, val)
         self.stream_fmt.setCurrentIndex(max(0, self.stream_fmt.findData(getattr(settings, "stream_format", "mkv"))))
@@ -966,7 +983,8 @@ class OptionsDialog(Dialog):
         v.addWidget(separator())
         self.auto_ffmpeg = QCheckBox("Download ffmpeg automatically if it isn't installed (one time, about 200 MB)")
         self.auto_ffmpeg.setChecked(getattr(settings, "auto_get_ffmpeg", True))
-        self.auto_ffmpeg.setEnabled(sys.platform == "win32")
+        from ..media import can_download_ffmpeg
+        self.auto_ffmpeg.setEnabled(can_download_ffmpeg())
         v.addWidget(self.auto_ffmpeg)
         self.ffmpeg_status = QLabel()
         self.ffmpeg_status.setObjectName("subtitle")
@@ -1003,7 +1021,7 @@ class OptionsDialog(Dialog):
         path = find_ffmpeg(refresh=refresh)
         if path:
             self.ffmpeg_status.setText(f"ffmpeg found: {path}")
-        elif sys.platform == "win32":
+        elif self.auto_ffmpeg.isEnabled():
             self.ffmpeg_status.setText("ffmpeg isn't installed yet. Fetchly will download it the first time it "
                                        "converts a video (if the box above is ticked).")
         else:
@@ -1174,9 +1192,38 @@ class SchedulerDialog(Dialog):
 
 
 # =========================================================================== Browser setup
+_LINUX_BROWSERS = (  # (name, commands to look for, extensions page)
+    ("Google Chrome", ("google-chrome", "google-chrome-stable"), "chrome://extensions/"),
+    ("Chromium", ("chromium", "chromium-browser"), "chrome://extensions/"),
+    ("Microsoft Edge", ("microsoft-edge", "microsoft-edge-stable"), "edge://extensions/"),
+    ("Brave", ("brave-browser", "brave"), "brave://extensions/"),
+    ("Vivaldi", ("vivaldi", "vivaldi-stable"), "vivaldi://extensions/"),
+    ("Opera", ("opera",), "opera://extensions"),
+)
+_FLATPAK_BROWSERS = (
+    ("Google Chrome", "com.google.Chrome", "chrome://extensions/"),
+    ("Chromium", "org.chromium.Chromium", "chrome://extensions/"),
+    ("Microsoft Edge", "com.microsoft.Edge", "edge://extensions/"),
+    ("Brave", "com.brave.Browser", "brave://extensions/"),
+)
+
+
 def find_browsers():
-    """Installed Chromium browsers on Windows: [(name, exe, extensions_url)]."""
+    """Installed Chromium-based browsers: [(name, command list, extensions page)]."""
     found = []
+    if sys.platform.startswith("linux"):
+        import shutil
+        for name, cmds, page in _LINUX_BROWSERS:
+            exe = next((shutil.which(c) for c in cmds if shutil.which(c)), None)
+            if exe:
+                found.append((name, [exe], page))
+        if shutil.which("flatpak"):
+            have = {n for n, _, _ in found}
+            homes = [os.path.expanduser("~/.local/share/flatpak/app"), "/var/lib/flatpak/app"]
+            for name, app_id, page in _FLATPAK_BROWSERS:
+                if name not in have and any(os.path.isdir(os.path.join(h, app_id)) for h in homes):
+                    found.append((name, ["flatpak", "run", app_id], page))
+        return found
     if sys.platform != "win32":
         return found
     import winreg
@@ -1195,7 +1242,7 @@ def find_browsers():
             except OSError:
                 continue
         if path and os.path.exists(path):
-            found.append((name, path, page))
+            found.append((name, [path], page))
     return found
 
 
@@ -1249,7 +1296,7 @@ class BrowserSetupDialog(Dialog):
 
     def _open_browser(self, exe, page):
         try:
-            subprocess.Popen([exe, page])
+            subprocess.Popen(list(exe) + [page], env=child_env(), start_new_session=sys.platform != "win32")
         except OSError as e:
             QMessageBox.warning(self, APP_TITLE, str(e))
         self._copy(extension_dir(), quiet=True)
@@ -1288,7 +1335,7 @@ class AboutDialog(Dialog):
         t.setObjectName("title")
         t.setAlignment(Qt.AlignCenter)
         self.body.addWidget(t)
-        v = QLabel(f"Version {VERSION} (64-bit)")
+        v = QLabel(f"Version {VERSION} for {OS_NAME} (64-bit)")
         v.setObjectName("subtitle")
         v.setAlignment(Qt.AlignCenter)
         self.body.addWidget(v)

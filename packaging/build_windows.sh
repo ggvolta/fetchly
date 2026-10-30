@@ -21,7 +21,7 @@ wine "$WINPY/python.exe" -m PyInstaller --noconfirm --clean --windowed --name Fe
   main.py </dev/null 2>&1 | cat
 cp -r extension dist/Fetchly/extension
 cp packaging/THIRD-PARTY-NOTICES.txt LICENSE dist/Fetchly/
-(cd packaging && makensis -V2 -DSRCDIR=../dist/Fetchly -DOUTFILE=../dist/Fetchly-Setup-$VERSION.exe -DVERSION=$VERSION installer.nsi)
-(cd dist && rm -f Fetchly-$VERSION-portable.zip && zip -qr Fetchly-$VERSION-portable.zip Fetchly)
-(cd extension && rm -f ../dist/Fetchly-Extension-$VERSION.zip && zip -qr ../dist/Fetchly-Extension-$VERSION.zip .)
+(cd packaging && makensis -V2 -DSRCDIR=../dist/Fetchly -DOUTFILE=../dist/Fetchly-Windows-Setup.exe -DVERSION=$VERSION installer.nsi)
+(cd dist && rm -f Fetchly-Windows-Portable.zip && zip -qr Fetchly-Windows-Portable.zip Fetchly)
+(cd extension && rm -f ../dist/Fetchly-Browser-Extension.zip && zip -qr ../dist/Fetchly-Browser-Extension.zip .)
 ls -la dist

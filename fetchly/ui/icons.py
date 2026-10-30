@@ -257,8 +257,21 @@ def _drawn_file_icon(ext, s=32):
     return QIcon(pm)
 
 
+def _theme_icon(filename):
+    """The desktop icon theme's icon for this file type (Linux), or None."""
+    from PySide6.QtCore import QMimeDatabase
+    mime = QMimeDatabase().mimeTypeForFile(filename, QMimeDatabase.MatchExtension)
+    if not mime.isValid() or mime.isDefault():
+        return None
+    for name in (mime.iconName(), mime.genericIconName()):
+        if name and QIcon.hasThemeIcon(name):
+            return QIcon.fromTheme(name)
+    return None
+
+
 class FileIcons:
-    """Real Windows shell icons per file type (like Explorer/IDM); drawn icons elsewhere."""
+    """File-type icons: the Windows shell's icons on Windows, the desktop icon theme's on Linux, and drawn
+    icons when neither has one."""
 
     def __init__(self, cache_dir):
         self.cache = {}
@@ -276,6 +289,8 @@ class FileIcons:
         if key in self.cache:
             return self.cache[key]
         ic = None
+        if sys.platform.startswith("linux") and ext:
+            ic = _theme_icon(filename)
         if self.provider and ext and ext.isalnum():
             try:
                 os.makedirs(self.dir, exist_ok=True)

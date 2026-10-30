@@ -113,41 +113,62 @@ def banner(mode):
     p.setFont(font(30, 500, 100))
     p.setPen(QColor(c["caption"]))
     p.drawText(QRectF(110, 398, 900, 50), Qt.AlignLeft | Qt.AlignVCenter,
-               "Free and open source, for Windows 10 and 11.")
+               "Free and open source, for Windows and Linux.")
     p.end()
     img.save(os.path.join(OUT, f"banner-{mode}.png"))
 
 
 # ------------------------------------------------------------------ download button
-def windows_glyph(p, x, y, s, color):
-    gap = s * 0.08
-    q = (s - gap) / 2
-    p.setPen(Qt.NoPen)
-    p.setBrush(QColor(color))
-    for dx in (0, q + gap):
-        for dy in (0, q + gap):
-            p.drawRect(QRectF(x + dx, y + dy, q, q))
+def download_glyph(p, x, y, s, color):
+    """Arrow into a tray, drawn to match the logo's stroke style."""
+    u = s / 48.0
+    pen = QPen(QColor(color), 4.6 * u, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawLine(QPointF(x + 24 * u, y + 6 * u), QPointF(x + 24 * u, y + 30 * u))
+    arrow = QPainterPath(QPointF(x + 14 * u, y + 21 * u))
+    arrow.lineTo(x + 24 * u, y + 31 * u)
+    arrow.lineTo(x + 34 * u, y + 21 * u)
+    p.drawPath(arrow)
+    tray = QPainterPath(QPointF(x + 8 * u, y + 32 * u))
+    tray.lineTo(x + 8 * u, y + 41 * u)
+    tray.lineTo(x + 40 * u, y + 41 * u)
+    tray.lineTo(x + 40 * u, y + 32 * u)
+    p.drawPath(tray)
 
 
-def button(mode):
-    w, h = 660, 128
+BUTTONS = {
+    "windows": ("Download for Windows", "Windows 10 and 11, 64-bit"),
+    "linux": ("Download for Linux", "AppImage for most distributions"),
+}
+
+
+def button(mode, system):
+    """Download button artwork: amber in both themes, so it reads as the main action on the page."""
+    title, sub = BUTTONS[system]
+    w, h = 760, 168
     img, p = canvas(w, h, transparent=True)
     g = QLinearGradient(0, 0, 0, h)
     g.setColorAt(0, QColor("#FFC453"))
     g.setColorAt(1, QColor("#FF9F24"))
     p.setPen(Qt.NoPen)
     p.setBrush(g)
-    p.drawRoundedRect(QRectF(0, 0, w, h), 22, 22)
+    p.drawRoundedRect(QRectF(0, 0, w, h), 26, 26)
     p.setPen(QPen(QColor(255, 255, 255, 110), 2))
     p.setBrush(Qt.NoBrush)
-    p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 21, 21)
+    p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 25, 25)
     ink = "#161845"
-    windows_glyph(p, 52, 42, 44, ink)
+    download_glyph(p, 46, (h - 64) / 2, 64, ink)
     p.setPen(QColor(ink))
-    p.setFont(font(40, 700, 99))
-    p.drawText(QRectF(120, 0, w - 140, h), Qt.AlignLeft | Qt.AlignVCenter, "Download for Windows")
+    p.setFont(font(46, 800, 98))
+    p.drawText(QRectF(136, 26, w - 160, 66), Qt.AlignLeft | Qt.AlignVCenter, title)
+    sub_ink = QColor(ink)
+    sub_ink.setAlpha(190)
+    p.setPen(sub_ink)
+    p.setFont(font(30, 500))
+    p.drawText(QRectF(136, 92, w - 160, 48), Qt.AlignLeft | Qt.AlignVCenter, sub)
     p.end()
-    img.save(os.path.join(OUT, f"download-{mode}.png"))
+    img.save(os.path.join(OUT, f"download-{system}-{mode}.png"))
 
 
 # ------------------------------------------------------------------ diagram
@@ -251,7 +272,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     for mode in ("dark", "light"):
         banner(mode)
-        button(mode)
+        button(mode, "windows")
+        button(mode, "linux")
         diagram(mode)
     titles = {"main": "Fetchly", "progress": "ubuntu-26.04-desktop-amd64.iso", "download": "Download File Info"}
     for src in sorted(f for f in os.listdir(SHOTS) if f.endswith(".png")):

@@ -1,6 +1,7 @@
 name: Release
 
-# Builds the Windows installer, portable zip and extension zip and publishes them as a GitHub Release.
+# Builds Fetchly for Windows (installer and portable zip) and Linux (AppImage), plus the browser extension zip,
+# tests each build, and publishes them together as one GitHub Release.
 # Runs when the version in fetchly/__init__.py changes on main (or when a v* tag is pushed).
 # To release: raise __version__ (and "version" in extension/manifest.json), commit, push.
 #
@@ -99,7 +100,7 @@ jobs:
           $nsis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
           if (-not $nsis) { $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
           Push-Location packaging
-          & $nsis /V2 "/DSRCDIR=..\dist\Fetchly" "/DOUTFILE=..\dist\Fetchly-Setup-${env:VERSION}.exe" "/DVERSION=${env:VERSION}" installer.nsi
+          & $nsis /V2 "/DSRCDIR=..\dist\Fetchly" "/DOUTFILE=..\dist\Fetchly-Windows-Setup.exe" "/DVERSION=${env:VERSION}" installer.nsi
           Pop-Location
 
       # ---- sign the installer ------------------------------------------------------------------------
@@ -109,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-installer
-          path: dist/Fetchly-Setup-${{ env.VERSION }}.exe
+          path: dist/Fetchly-Windows-Setup.exe
           if-no-files-found: error
 
       - name: Sign installer
@@ -131,17 +132,17 @@ jobs:
         if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
         run: |
           Get-ChildItem signed-installer -Filter *.zip | ForEach-Object { Expand-Archive $_.FullName -DestinationPath signed-installer -Force }
-          $exe = Get-ChildItem signed-installer -Recurse -Filter "Fetchly-Setup-*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem signed-installer -Recurse -Filter "Fetchly-Windows-Setup.exe" | Select-Object -First 1
           if (-not $exe) { throw "Signed installer not found" }
-          Copy-Item $exe.FullName "dist\Fetchly-Setup-${env:VERSION}.exe" -Force
-          $sig = Get-AuthenticodeSignature "dist\Fetchly-Setup-${env:VERSION}.exe"
+          Copy-Item $exe.FullName "dist\Fetchly-Windows-Setup.exe" -Force
+          $sig = Get-AuthenticodeSignature "dist\Fetchly-Windows-Setup.exe"
           if ($sig.Status -ne "Valid") { throw "Installer signature is $($sig.Status)" }
           "Installer signed by: $($sig.SignerCertificate.Subject)"
 
       - name: Build zips
         run: |
-          Compress-Archive -Path dist\Fetchly -DestinationPath "dist\Fetchly-${env:VERSION}-portable.zip"
-          Compress-Archive -Path extension\* -DestinationPath "dist\Fetchly-Extension-${env:VERSION}.zip"
+          Compress-Archive -Path dist\Fetchly -DestinationPath "dist\Fetchly-Windows-Portable.zip"
+          Compress-Archive -Path extension\* -DestinationPath "dist\Fetchly-Browser-Extension.zip"
 
       - name: Smoke test the built app
         run: |
@@ -153,12 +154,71 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Fetchly-${{ env.VERSION }}
+          name: windows
           path: |
-            dist/Fetchly-Setup-*.exe
-            dist/Fetchly-*-portable.zip
-            dist/Fetchly-Extension-*.zip
+            dist/Fetchly-Windows-Setup.exe
+            dist/Fetchly-Windows-Portable.zip
+            dist/Fetchly-Browser-Extension.zip
+          if-no-files-found: error
 
+  linux:
+    # Built on the oldest supported Ubuntu so the AppImage runs on Ubuntu 22.04 and anything newer
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          # Qt's X11 libraries (bundled into the AppImage) and a virtual display for the smoke test
+          sudo apt-get install -y -qq libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-xinerama0 libxcb-shape0 libxkbcommon-x11-0 libegl1 xvfb
+          pip install -r requirements.txt pyinstaller pillow
+          curl -fsSL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+
+      - name: Run tests
+        run: python -m tests.test_engine
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Build AppImage
+        run: PYTHON=python APPIMAGETOOL=./appimagetool packaging/build_linux.sh
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Smoke test the AppImage
+        run: |
+          export HOME=$(mktemp -d)
+          xvfb-run -a dist/Fetchly-Linux-x86_64.AppImage --appimage-extract-and-run --tray > app.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fs http://127.0.0.1:7614/ping | grep -q '"app": "Fetchly"'; then echo "Fetchly is running"; exit 0; fi
+            sleep 1
+          done
+          cat app.log
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/Fetchly-Linux-x86_64.AppImage
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        run: echo "VERSION=$(python3 -c 'import fetchly; print(fetchly.__version__)')" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -167,6 +227,7 @@ jobs:
           name: Fetchly ${{ env.VERSION }}
           body_path: packaging/RELEASE_NOTES.md
           files: |
-            dist/Fetchly-Setup-*.exe
-            dist/Fetchly-*-portable.zip
-            dist/Fetchly-Extension-*.zip
+            dist/Fetchly-Windows-Setup.exe
+            dist/Fetchly-Windows-Portable.zip
+            dist/Fetchly-Linux-x86_64.AppImage
+            dist/Fetchly-Browser-Extension.zip

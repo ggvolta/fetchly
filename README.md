@@ -8,21 +8,32 @@
 <p align="center">
   <a href="https://github.com/ggvolta/fetchly/releases/latest"><img src="https://img.shields.io/github/v/release/ggvolta/fetchly?style=flat-square&label=release&color=FFB33A&labelColor=161845" alt="Latest release"></a>
   <a href="https://github.com/ggvolta/fetchly/releases"><img src="https://img.shields.io/github/downloads/ggvolta/fetchly/total?style=flat-square&color=3D42C9&labelColor=161845" alt="Downloads"></a>
-  <img src="https://img.shields.io/badge/Windows-10%20and%2011-3D42C9?style=flat-square&labelColor=161845" alt="Windows 10 and 11">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-3D42C9?style=flat-square&labelColor=161845" alt="Windows and Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3D42C9?style=flat-square&labelColor=161845" alt="MIT license"></a>
   <a href="https://github.com/ggvolta/fetchly/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ggvolta/fetchly/ci.yml?branch=main&style=flat-square&label=tests&labelColor=161845" alt="Tests"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/ggvolta/fetchly/releases/latest">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/art/download-dark.png">
-      <img src="docs/art/download-light.png" width="300" alt="Download for Windows">
-    </picture>
-  </a>
+  <a href="https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Windows-Setup.exe"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/art/download-windows-dark.png">
+    <img src="docs/art/download-windows-light.png" width="300" alt="Download for Windows">
+  </picture></a>
+  &nbsp;
+  <a href="https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Linux-x86_64.AppImage"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/art/download-linux-dark.png">
+    <img src="docs/art/download-linux-light.png" width="300" alt="Download for Linux">
+  </picture></a>
 </p>
 
-Fetchly is a download manager for Windows. It splits each file into pieces and downloads them over many
+<p align="center">
+  <sub>
+    Also available: <a href="https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Windows-Portable.zip">Windows portable zip</a>
+    &nbsp;·&nbsp; <a href="https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Browser-Extension.zip">browser extension</a>
+    &nbsp;·&nbsp; <a href="https://github.com/ggvolta/fetchly/releases">all releases</a>
+  </sub>
+</p>
+
+Fetchly is a download manager for Windows and Linux. It splits each file into pieces and downloads them over many
 connections at once, picks up where it left off when a download breaks, and takes over downloads from your
 browser so you don't have to copy links by hand.
 
@@ -66,7 +77,7 @@ saves you from starting over.
 - Sorts files into Compressed, Documents, Music, Programs and Video, each with its own folder.
 - Runs a download queue on a schedule, then exits or shuts the computer down when it's done.
 - Also: a speed limiter, batch downloads (`photo*.jpg` from 001 to 100), link import and export, clipboard
-  monitoring, drag and drop, proxy support, and light and dark themes that follow Windows.
+  monitoring, drag and drop, proxy support, and light and dark themes that follow your system.
 
 <p align="center">
   <picture>
@@ -81,27 +92,46 @@ saves you from starting over.
 
 ## Install
 
-1. Download the **Fetchly-Setup** file from the [latest release](https://github.com/ggvolta/fetchly/releases/latest).
-   It needs 64-bit Windows 10 or 11.
-2. Run it. The installer isn't code-signed yet, so Windows SmartScreen may warn you: choose
-   **More info**, then **Run anyway**. See the [code signing policy](#code-signing-policy).
+Each release has one file per system. Pick yours:
 
-To skip the installer, download the **portable** zip, unzip it anywhere and run `Fetchly.exe`.
+| Your computer | Download | |
+|---|---|---|
+| Windows 10 or 11 (64-bit) | [Fetchly-Windows-Setup.exe](https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Windows-Setup.exe) | Installer, recommended |
+| Windows, without installing | [Fetchly-Windows-Portable.zip](https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Windows-Portable.zip) | Unzip and run `Fetchly.exe` |
+| Linux (64-bit) | [Fetchly-Linux-x86_64.AppImage](https://github.com/ggvolta/fetchly/releases/latest/download/Fetchly-Linux-x86_64.AppImage) | One file, runs on most distributions |
 
-To uninstall, use **Settings > Apps > Installed apps > Fetchly > Uninstall** in Windows. Your downloaded files stay
-where they are; the uninstaller asks whether to also remove your settings and download list.
+### Windows
 
-## Browser extension
+1. Download **Fetchly-Windows-Setup.exe** and run it.
+2. The installer isn't code-signed yet, so Windows SmartScreen may warn you: choose **More info**, then
+   **Run anyway**. See the [code signing policy](#code-signing-policy).
 
-The extension works in Chrome, Edge, Brave, Opera and Vivaldi. Until it's listed in the browser stores, add it
-once by hand. Fetchly walks you through this the first time it starts (also under **Help > Browser
-integration**):
+To uninstall, use **Settings > Apps > Installed apps > Fetchly > Uninstall**. Your downloaded files stay where
+they are; the uninstaller asks whether to also remove your settings and download list.
 
-1. Open `chrome://extensions` (in Edge, `edge://extensions`) and turn on **Developer mode**.
-2. Click **Load unpacked** and select `C:\Program Files\Fetchly\extension`.
+### Linux
 
-The status bar in Fetchly shows **Browser connected** once it works. The extension only talks to the Fetchly
-app on your own computer; see the [privacy policy](PRIVACY.md).
+1. Download **Fetchly-Linux-x86_64.AppImage**.
+2. Allow it to run: right-click the file, open **Properties** and turn on **Allow executing file as program**
+   (or run `chmod +x Fetchly-Linux-x86_64.AppImage`).
+3. Double-click it. Fetchly offers to add itself to your applications menu, so you can start it from there
+   next time.
+
+It works on Ubuntu 22.04 and newer, Debian 12, Fedora, Linux Mint, Pop!\_OS, openSUSE, Arch and other current
+distributions. Nothing is installed system-wide.
+
+<details>
+<summary>If it doesn't start, or there's no tray icon</summary>
+
+- **Nothing happens when you open it.** Start it from a terminal to see why. If it mentions FUSE, install it
+  (`sudo apt install fuse3` on Debian and Ubuntu, `sudo dnf install fuse3` on Fedora) or start Fetchly with
+  `./Fetchly-Linux-x86_64.AppImage --appimage-extract-and-run`.
+- **No tray icon on GNOME.** Stock GNOME hides tray icons. Install the *AppIndicator and KStatusNotifierItem
+  Support* extension (preinstalled on Ubuntu). Without it, Fetchly minimizes to the dock instead.
+</details>
+
+To uninstall, untick **Show Fetchly in the applications menu** in **Options**, then delete the AppImage. Your
+settings and download list are in `~/.config/Fetchly`.
 
 ## Benchmarks
 
@@ -124,9 +154,11 @@ python main.py                  # run Fetchly
 python -m tests.test_engine     # run the engine tests
 ```
 
-Each release is built into the installer, portable zip and extension zip by
-[GitHub Actions](.github/workflows/release.yml). To build on your own Windows machine, run
-`packaging\build.bat` (the setup file also needs [NSIS](https://nsis.sourceforge.io/)).
+Every release is built and tested by [GitHub Actions](.github/workflows/release.yml). To build it yourself:
+
+- **Windows:** run `packaging\build.bat` (the setup file also needs [NSIS](https://nsis.sourceforge.io/)).
+- **Linux:** run `packaging/build_linux.sh`. It needs
+  [appimagetool](https://github.com/AppImage/appimagetool) and, on Debian or Ubuntu, `libxcb-cursor0`.
 
 <details>
 <summary>Project layout</summary>
@@ -134,11 +166,11 @@ Each release is built into the installer, portable zip and extension zip by
 ```
 main.py               entry point: one running copy, --tray starts minimized
 fetchly/engine.py     segmented HTTP engine, HLS streams, speed limiter
-fetchly/manager.py    download list, queue, scheduler, saved state in %APPDATA%\Fetchly
+fetchly/manager.py    download list, queue, scheduler, saved state
 fetchly/server.py     local API on 127.0.0.1:7614 that the extension talks to
 fetchly/ui/           the Qt interface
 extension/            Chromium extension (Manifest V3)
-packaging/            installer script and build files
+packaging/            Windows installer, Linux AppImage and build files
 tools/                benchmark, icon and artwork generators
 ```
 </details>
@@ -146,7 +178,7 @@ tools/                benchmark, icon and artwork generators
 ## Limitations
 
 - YouTube, which serves audio and video as separate streams, and DRM-protected services aren't supported.
-- Firefox support is planned.
+- Firefox support is planned. There is no macOS version yet.
 - No FTP, BitTorrent or website grabber.
 
 ## Code signing policy

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ggvolta.Fetchly</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Fetchly</name>
+  <summary>Faster downloads with many connections at once</summary>
+  <developer id="io.github.ggvolta">
+    <name>ggvolta</name>
+  </developer>
+  <description>
+    <p>
+      Fetchly is a download manager. It splits each file into parts and downloads them over several
+      connections at once, which is faster on servers that limit each connection, and it resumes
+      interrupted downloads instead of starting over.
+    </p>
+    <p>
+      With the Fetchly browser extension for Chrome, Edge, Brave, Opera and Vivaldi, downloads and videos
+      go straight to Fetchly.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.ggvolta.Fetchly.desktop</launchable>
+  <url type="homepage">https://github.com/ggvolta/fetchly</url>
+  <url type="bugtracker">https://github.com/ggvolta/fetchly/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ggvolta/fetchly/main/docs/screenshots/main-light.png</image>
+      <caption>The download list</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="1.2.0" date="2026-10-31" />
+  </releases>
+</component>
