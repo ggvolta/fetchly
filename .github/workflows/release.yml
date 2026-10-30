@@ -3,6 +3,10 @@ name: Release
 # Builds the Windows installer, portable zip and extension zip and publishes them as a GitHub Release.
 # Runs when the version in fetchly/__init__.py changes on main (or when a v* tag is pushed).
 # To release: raise __version__ (and "version" in extension/manifest.json), commit, push.
+#
+# Code signing (SignPath Foundation): the signing steps run only once the repository has the secret
+# SIGNPATH_API_TOKEN and the variable SIGNPATH_ORGANIZATION_ID. Until then releases are built unsigned.
+# Each signing request must be approved by hand in SignPath; see CODE_SIGNING_POLICY.md.
 on:
   push:
     branches: [main]
@@ -18,6 +22,10 @@ jobs:
     runs-on: windows-latest
     env:
       QT_QPA_PLATFORM: offscreen
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT: fetchly
+      SIGNPATH_POLICY: release-signing
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,6 +42,7 @@ jobs:
 
       - name: Build Fetchly.exe
         run: |
+          python tools/sync_version.py
           python tools/make_assets.py
           python -m PyInstaller --noconfirm --clean --windowed --name Fetchly `
             --icon assets\fetchly.ico --version-file packaging\version_info.txt `
@@ -44,17 +53,95 @@ jobs:
           Copy-Item -Recurse extension dist\Fetchly\extension
           Copy-Item packaging\THIRD-PARTY-NOTICES.txt, LICENSE dist\Fetchly\
 
-      - name: Build installer and zips
+      - name: Read version
         run: |
           $v = python -c "import fetchly; print(fetchly.__version__)"
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ---- sign Fetchly.exe before it goes into the installer and portable zip -------------------
+      - name: Upload app for signing
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
+        id: unsigned-app
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-app
+          path: dist/Fetchly/Fetchly.exe
+          if-no-files-found: error
+
+      - name: Sign Fetchly.exe
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-app
+          parameters: |
+            version: "${{ env.VERSION }}"
+
+      - name: Use the signed Fetchly.exe
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
+        run: |
+          Get-ChildItem signed-app -Filter *.zip | ForEach-Object { Expand-Archive $_.FullName -DestinationPath signed-app -Force }
+          $exe = Get-ChildItem signed-app -Recurse -Filter Fetchly.exe | Select-Object -First 1
+          if (-not $exe) { throw "Signed Fetchly.exe not found" }
+          Copy-Item $exe.FullName dist\Fetchly\Fetchly.exe -Force
+          $sig = Get-AuthenticodeSignature dist\Fetchly\Fetchly.exe
+          if ($sig.Status -ne "Valid") { throw "Fetchly.exe signature is $($sig.Status)" }
+          "Fetchly.exe signed by: $($sig.SignerCertificate.Subject)"
+
+      - name: Build installer
+        run: |
           $nsis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
           if (-not $nsis) { $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
           Push-Location packaging
-          & $nsis /V2 "/DSRCDIR=..\dist\Fetchly" "/DOUTFILE=..\dist\Fetchly-Setup-$v.exe" "/DVERSION=$v" installer.nsi
+          & $nsis /V2 "/DSRCDIR=..\dist\Fetchly" "/DOUTFILE=..\dist\Fetchly-Setup-${env:VERSION}.exe" "/DVERSION=${env:VERSION}" installer.nsi
           Pop-Location
-          Compress-Archive -Path dist\Fetchly -DestinationPath "dist\Fetchly-$v-portable.zip"
-          Compress-Archive -Path extension\* -DestinationPath "dist\Fetchly-Extension-$v.zip"
-          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ---- sign the installer ------------------------------------------------------------------------
+      - name: Upload installer for signing
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
+        id: unsigned-installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist/Fetchly-Setup-${{ env.VERSION }}.exe
+          if-no-files-found: error
+
+      - name: Sign installer
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-installer
+          parameters: |
+            version: "${{ env.VERSION }}"
+
+      - name: Use the signed installer
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != ''
+        run: |
+          Get-ChildItem signed-installer -Filter *.zip | ForEach-Object { Expand-Archive $_.FullName -DestinationPath signed-installer -Force }
+          $exe = Get-ChildItem signed-installer -Recurse -Filter "Fetchly-Setup-*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "Signed installer not found" }
+          Copy-Item $exe.FullName "dist\Fetchly-Setup-${env:VERSION}.exe" -Force
+          $sig = Get-AuthenticodeSignature "dist\Fetchly-Setup-${env:VERSION}.exe"
+          if ($sig.Status -ne "Valid") { throw "Installer signature is $($sig.Status)" }
+          "Installer signed by: $($sig.SignerCertificate.Subject)"
+
+      - name: Build zips
+        run: |
+          Compress-Archive -Path dist\Fetchly -DestinationPath "dist\Fetchly-${env:VERSION}-portable.zip"
+          Compress-Archive -Path extension\* -DestinationPath "dist\Fetchly-Extension-${env:VERSION}.zip"
 
       - name: Smoke test the built app
         run: |

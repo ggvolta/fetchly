@@ -84,9 +84,12 @@ saves you from starting over.
 1. Download the **Fetchly-Setup** file from the [latest release](https://github.com/ggvolta/fetchly/releases/latest).
    It needs 64-bit Windows 10 or 11.
 2. Run it. The installer isn't code-signed yet, so Windows SmartScreen may warn you: choose
-   **More info**, then **Run anyway**.
+   **More info**, then **Run anyway**. See the [code signing policy](#code-signing-policy).
 
 To skip the installer, download the **portable** zip, unzip it anywhere and run `Fetchly.exe`.
+
+To uninstall, use **Settings > Apps > Installed apps > Fetchly > Uninstall** in Windows. Your downloaded files stay
+where they are; the uninstaller asks whether to also remove your settings and download list.
 
 ## Browser extension
 
@@ -121,7 +124,7 @@ python main.py                  # run Fetchly
 python -m tests.test_engine     # run the engine tests
 ```
 
-Each version tag is built into the installer, portable zip and extension zip by
+Each release is built into the installer, portable zip and extension zip by
 [GitHub Actions](.github/workflows/release.yml). To build on your own Windows machine, run
 `packaging\build.bat` (the setup file also needs [NSIS](https://nsis.sourceforge.io/)).
 
@@ -146,9 +149,22 @@ tools/                benchmark, icon and artwork generators
 - Firefox support is planned.
 - No FTP, BitTorrent or website grabber.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org). Fetchly has applied to their open source program; releases will be
+signed once it's approved.
+
+Only files built by [GitHub Actions](.github/workflows/release.yml) from this repository are signed, and every
+signing request is approved by hand. Committer, reviewer and approver: [ggvolta](https://github.com/ggvolta).
+Fetchly doesn't send information to other networked systems unless you ask it to; see the
+[privacy policy](PRIVACY.md). Full details are in the [code signing policy](CODE_SIGNING_POLICY.md).
+
 ## Contributing
 
-Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[code of conduct](CODE_OF_CONDUCT.md). Please report security problems privately, as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 

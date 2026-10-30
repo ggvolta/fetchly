@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in Fetchly doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Fetchly version
+      description: Shown in Help › About Fetchly
+      placeholder: "1.1.2"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+  - type: input
+    id: browser
+    attributes:
+      label: Browser (if it involves the extension)
+      placeholder: Chrome 131
+  - type: input
+    id: url
+    attributes:
+      label: Download address (if you can share it)
+  - type: textarea
+    id: log
+    attributes:
+      label: Error log
+      description: Paste the contents of %APPDATA%\Fetchly\error.log if the file exists.
+      render: text

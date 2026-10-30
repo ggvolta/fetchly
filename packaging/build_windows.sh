@@ -10,6 +10,7 @@ export WINEDEBUG=-all WINEPREFIX="${WINEPREFIX:-/opt/wineprefix}"
 export WINEPATH="Z:${WINPY//\//\\}\\Library\\bin"
 VERSION=$(python3 -c "import fetchly;print(fetchly.__version__)")
 
+python3 tools/sync_version.py
 python3 tools/make_assets.py
 rm -rf build dist
 wine "$WINPY/python.exe" -m PyInstaller --noconfirm --clean --windowed --name Fetchly \

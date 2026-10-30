@@ -5,7 +5,7 @@ Fetchly now stays out of your way in the system tray, and download windows work 
 - **Fetchly-1.1.2-portable.zip** runs without installing: unzip it and open `Fetchly.exe`.
 - **Fetchly-Extension-1.1.2.zip** is the browser extension, also included in the installer at `C:\Program Files\Fetchly\extension`.
 
-The installer isn't code-signed yet, so Windows SmartScreen may warn you the first time. Choose **More info**, then **Run anyway**.
+The installer isn't code-signed yet, so Windows SmartScreen may warn you the first time. Choose **More info**, then **Run anyway**. See the [code signing policy](https://github.com/ggvolta/fetchly/blob/main/CODE_SIGNING_POLICY.md).
 
 **In this version**
 - Download windows are now independent windows with their own taskbar button, which shows the progress
